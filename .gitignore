@@ -1,0 +1,51 @@
+# ─── Credentials — NEVER commit ───────────────────────────────────────────────
+.env
+
+# ─── Generated outputs ────────────────────────────────────────────────────────
+reports/
+logs/
+
+# ─── Local data cache ─────────────────────────────────────────────────────────
+data/historical/
+*.parquet
+*.db
+*.sqlite
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+site-packages/
+
+# ─── Virtual environments ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# ─── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── Claude Code internal files ───────────────────────────────────────────────
+.claude/
