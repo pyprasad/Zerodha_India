@@ -1,6 +1,5 @@
 kiteconnect>=4.2.0
 backtrader>=1.9.78.123
-vectorbt>=0.26.2
 pandas>=2.0.0
 numpy>=1.25.0
 yfinance>=0.2.40

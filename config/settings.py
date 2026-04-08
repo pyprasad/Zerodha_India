@@ -32,6 +32,32 @@ INSTRUMENTS = {
         "exchange": "NSE",
         "symbol": "INDIA VIX",
     },
+    # v6 strategy instruments (added for Kite historical data fetch)
+    # Tokens are NSE spot index tokens — verify after login with:
+    #   kite.instruments("NSE") and search by name
+    "FINNIFTY": {
+        "token": 257801,          # NIFTY FIN SERVICE spot index — verify after login
+        "exchange": "NSE",
+        "symbol": "NIFTY FIN SERVICE",
+        "futures_symbol": "NFO:FINNIFTY",
+        "lot_size": 60,
+        "tick_size": 0.05,
+    },
+    "MIDCPNIFTY": {
+        "token": 288009,          # NIFTY MIDCAP SELECT spot index — verify after login
+        "exchange": "NSE",
+        "symbol": "NIFTY MIDCAP SELECT",
+        "futures_symbol": "NFO:MIDCPNIFTY",
+        "lot_size": 120,
+        "tick_size": 0.05,
+    },
+    # INDIAVIX alias (same token as INDIA_VIX) — used by fetch_kite_daily.py
+    # to store data under the key v6_backtest.py expects ("INDIAVIX")
+    "INDIAVIX": {
+        "token": 264969,
+        "exchange": "NSE",
+        "symbol": "INDIA VIX",
+    },
 }
 
 # ---------------------------------------------------------------------------

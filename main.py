@@ -9,6 +9,7 @@ Usage:
   python main.py --mode optimize [--strategy ORB|EMA|SUPERTREND] [--instrument NIFTY|BANKNIFTY|ALL]
   python main.py --mode paper      (paper trading — no real orders)
   python main.py --mode live       (live trading — REAL ORDERS PLACED)
+  python main.py --mode v6-paper   (Williams%R v6 paper trading daemon — no real orders)
   python main.py --mode test       (run unit tests)
 """
 import argparse
@@ -197,6 +198,22 @@ def run_trading(mode: str):
 
 
 # ------------------------------------------------------------------
+# Mode: v6-paper  (Williams%R v6 strategy, paper trading daemon)
+# ------------------------------------------------------------------
+def run_v6_paper():
+    """
+    Start the Williams%R v6 paper trading daemon.
+    Runs the daily scheduler: login@08:55, entry@09:16,
+    exit checks@12:00/14:00/15:25, signals@15:25, EOD@15:30.
+    No real orders placed.
+    """
+    import os
+    os.environ["TRADING_MODE"] = "paper"
+    from scheduler.v6_paper_runner import run_v6_paper as _run
+    _run()
+
+
+# ------------------------------------------------------------------
 # CLI
 # ------------------------------------------------------------------
 def main():
@@ -207,7 +224,7 @@ def main():
     )
     parser.add_argument(
         "--mode",
-        choices=["fetch-historical", "backtest", "optimize", "paper", "live", "test"],
+        choices=["fetch-historical", "backtest", "optimize", "paper", "live", "v6-paper", "test"],
         required=True,
         help="Operating mode",
     )
@@ -260,6 +277,9 @@ def main():
 
     elif args.mode in ("paper", "live"):
         run_trading(args.mode)
+
+    elif args.mode == "v6-paper":
+        run_v6_paper()
 
 
 if __name__ == "__main__":

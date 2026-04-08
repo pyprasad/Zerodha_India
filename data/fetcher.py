@@ -24,8 +24,9 @@ class KiteAuth:
     Uses pyotp for TOTP-based 2FA — no manual browser interaction required.
     """
 
-    LOGIN_URL = "https://kite.zerodha.com/api/login"
-    TWOFA_URL = "https://kite.zerodha.com/api/twofa"
+    LOGIN_URL  = "https://kite.zerodha.com/api/login"
+    TWOFA_URL  = "https://kite.zerodha.com/api/twofa"
+    CONNECT_LOGIN_URL = "https://kite.zerodha.com/connect/login"
 
     def __init__(self):
         self.kite = KiteConnect(api_key=creds.KITE_API_KEY)
@@ -79,20 +80,49 @@ class KiteAuth:
             raise RuntimeError(f"Kite login step 2 (TOTP) failed: {data2}")
         logger.info("Kite TOTP 2FA successful")
 
-        # Step 3: Extract request_token from redirect URL and exchange for access_token
-        # After 2FA, Zerodha sets a cookie and the request_token is available
-        # via the redirect to our app's redirect_url
+        # Step 3: Extract request_token
+        # First try: token may be directly in the 2FA response body
         request_token = data2["data"].get("request_token")
+
+        # Second try: token in a redirect_url field in the response
         if not request_token:
-            # Try parsing from redirect URL if present in response
-            redirect_url = data2.get("data", {}).get("redirect_url", "")
-            if "request_token=" in redirect_url:
-                request_token = redirect_url.split("request_token=")[1].split("&")[0]
+            redirect_url_field = data2.get("data", {}).get("redirect_url", "")
+            if "request_token=" in redirect_url_field:
+                request_token = redirect_url_field.split("request_token=")[1].split("&")[0]
+
+        # Third try: manually follow the OAuth redirect chain until we reach
+        # redirect_url (http://127.0.0.1) which contains the request_token.
+        # We stop before connecting to 127.0.0.1 — no server runs there, that's expected.
+        if not request_token:
+            connect_url = f"{self.CONNECT_LOGIN_URL}?v=3&api_key={creds.KITE_API_KEY}"
+            next_url = connect_url
+            for _ in range(10):   # follow up to 10 hops
+                try:
+                    r = session.get(next_url, allow_redirects=False)
+                    location = r.headers.get("Location", "")
+                    logger.info(f"redirect hop: status={r.status_code} Location={location[:120]}")
+                    if "request_token=" in location:
+                        request_token = location.split("request_token=")[1].split("&")[0]
+                        logger.info("Extracted request_token from redirect Location header")
+                        break
+                    if not location or r.status_code not in (301, 302, 303, 307, 308):
+                        break
+                    next_url = location
+                except Exception as hop_err:
+                    # ConnectionError to 127.0.0.1 is expected — token is in the attempted URL
+                    hop_str = str(hop_err)
+                    logger.info(f"redirect hop exception (expected for 127.0.0.1): {hop_str[:200]}")
+                    if "request_token=" in hop_str:
+                        part = hop_str.split("request_token=")[1]
+                        request_token = part.split("&")[0].split('"')[0].split("'")[0].split(")")[0]
+                        logger.info("Extracted request_token from connection error URL")
+                    break
 
         if not request_token:
             raise RuntimeError(
-                "Could not extract request_token from Kite 2FA response. "
-                "Check your Kite app's redirect_url configuration."
+                "Could not extract request_token from Kite login flow.\n"
+                "Fix: Go to developers.kite.trade → your app → set Redirect URL to "
+                "http://127.0.0.1 and save."
             )
 
         # Step 4: Generate access_token
