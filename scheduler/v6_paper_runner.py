@@ -498,23 +498,58 @@ class V6PaperRunner:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Scheduler setup
+# Timezone-aware scheduler setup
+# All schedule times are defined in IST and converted to server local time
+# at startup — so the daemon works correctly on any server timezone (UTC, BST, etc.)
 # ──────────────────────────────────────────────────────────────────────────────
+import zoneinfo
+
+_IST = zoneinfo.ZoneInfo("Asia/Kolkata")
+
+
+def _ist_to_local(ist_time_str: str) -> str:
+    """
+    Convert an IST time string "HH:MM" to server local time "HH:MM".
+    Uses today's date so DST offsets (for servers in Europe/London etc.) are correct.
+    """
+    from datetime import date, time as dtime
+    import zoneinfo
+
+    h, m   = map(int, ist_time_str.split(":"))
+    local_tz = datetime.now().astimezone().tzinfo          # server's local tz
+    ist_tz   = zoneinfo.ZoneInfo("Asia/Kolkata")
+
+    # Build a tz-aware IST datetime for today
+    ist_dt   = datetime.combine(date.today(), dtime(h, m), tzinfo=ist_tz)
+    local_dt = ist_dt.astimezone(local_tz)
+    return local_dt.strftime("%H:%M")
+
+
 def setup_v6_schedule(runner: V6PaperRunner):
-    """Register all daily jobs for v6 paper trading."""
+    """Register all daily jobs for v6 paper trading.
+    All times are IST — converted to server local time automatically.
+    """
     import schedule
 
-    schedule.every().day.at("08:55").do(runner.login)
-    schedule.every().day.at("09:16").do(runner.run_morning_entry)
-    schedule.every().day.at("12:00").do(runner.check_exits)
-    schedule.every().day.at("14:00").do(runner.check_exits)
-    schedule.every().day.at("15:25").do(runner.run_eod_signal_check)
-    schedule.every().day.at("15:25").do(runner.check_exits)   # Final exit check same time as signal
-    schedule.every().day.at("15:30").do(runner.end_of_day)
+    # IST schedule → converted to server local time
+    IST_JOBS = [
+        ("08:55", runner.login,                 "login"),
+        ("09:16", runner.run_morning_entry,     "morning entry"),
+        ("12:00", runner.check_exits,           "exit check"),
+        ("14:00", runner.check_exits,           "exit check"),
+        ("15:25", runner.run_eod_signal_check,  "EOD signals"),
+        ("15:25", runner.check_exits,           "final exit check"),
+        ("15:30", runner.end_of_day,            "EOD summary"),
+    ]
 
-    logger.info("[v6-paper] Daily schedule registered")
-    console.print("[dim][v6-paper] Schedule: login@08:55, entry@09:16, "
-                  "exits@12:00/14:00/15:25, signals@15:25, EOD@15:30[/dim]")
+    for ist_time, job_fn, label in IST_JOBS:
+        local_time = _ist_to_local(ist_time)
+        schedule.every().day.at(local_time).do(job_fn)
+        logger.info(f"[v6-paper] Scheduled {label}: {ist_time} IST → {local_time} local")
+
+    console.print("[dim][v6-paper] Schedule (IST → server local):[/dim]")
+    for ist_time, _, label in IST_JOBS:
+        console.print(f"[dim]  {label:20s}  {ist_time} IST → {_ist_to_local(ist_time)} local[/dim]")
 
 
 def run_v6_paper():
