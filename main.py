@@ -25,6 +25,7 @@ from rich.logging import RichHandler
 # ------------------------------------------------------------------
 # Logging
 # ------------------------------------------------------------------
+Path(__file__).parent.joinpath("logs").mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
