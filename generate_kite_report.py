@@ -24,6 +24,7 @@ Prerequisites:
 import warnings; warnings.filterwarnings("ignore")
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from dotenv import load_dotenv; load_dotenv()
 
 from datetime import datetime
 from pathlib import Path
@@ -91,8 +92,11 @@ print("        NIFTYIT included — token 259849 has clean OHLCV from 2017, adds
 print("        A supplementary 5-instrument run (2022+) is shown separately in the report.")
 from v6_backtest import (
     run_v6, annual_breakdown, attribution_stats, instrument_stats,
-    CAPITAL, INSTRUMENTS_4, CONFIGS
+    CAPITAL as _V6_CAPITAL, INSTRUMENTS_4, CONFIGS
 )
+import os
+CAPITAL = float(os.getenv("TRADING_CAPITAL", _V6_CAPITAL))
+print(f"  Starting capital: ₹{CAPITAL:,.0f} (from TRADING_CAPITAL env / v6_backtest default)")
 
 Path("reports").mkdir(exist_ok=True)
 
@@ -299,6 +303,7 @@ ts = datetime.now().strftime("%Y-%m-%d %H:%M")
 # ---------------------------------------------------------------------------
 # HTML — identical structure to generate_v6_report.py but Kite-labelled
 # ---------------------------------------------------------------------------
+capital_l = CAPITAL / 100_000   # e.g. 2000000 → 20.0 (lakhs)
 html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -375,7 +380,7 @@ html = f"""<!DOCTYPE html>
 
 <!-- HEADER -->
 <h1>v6 Williams%R — Zerodha Kite Data Report <span class="kite-badge">KITE DATA</span></h1>
-<p class="subtitle">Generated {ts} · 9-Year Backtest (Jan 2017 – Apr 2026) · NIFTY · BANKNIFTY · FINNIFTY (3 instruments with full Kite OHLCV) · ₹10L Capital · Data: Zerodha Kite Connect API</p>
+<p class="subtitle">Generated {ts} · 9-Year Backtest (Jan 2017 – Apr 2026) · NIFTY · BANKNIFTY · FINNIFTY · NIFTYIT (4 instruments with full Kite OHLCV) · ₹{capital_l:.0f}L Capital · Data: Zerodha Kite Connect API</p>
 <div class="warning" style="margin-bottom:16px">
   <h4>ℹ️ Why 3 instruments instead of 4?</h4>
   <p>Zerodha Kite token 288009 (NIFTY MID SELECT / MIDCPNIFTY) returns flat open=high=low=close prices
@@ -424,7 +429,7 @@ html = f"""<!DOCTYPE html>
   <div class="card stat-card">
     <div class="stat-value green">₹{s_best['capital']/10000000:.2f}Cr</div>
     <div class="stat-label">Final Capital</div>
-    <div class="stat-sub">Starting ₹10L → ₹{s_best['capital']/100000:.0f}L</div>
+    <div class="stat-sub">Starting ₹{capital_l:.0f}L → ₹{s_best['capital']/100000:.0f}L</div>
   </div>
   <div class="card stat-card">
     <div class="stat-value" style="color:var(--blue)">{s_best['total_ret']:+.0f}%</div>
@@ -474,7 +479,7 @@ html = f"""<!DOCTYPE html>
 
 <!-- EQUITY CURVE -->
 <div class="card" style="margin:16px 0" id="equity">
-  <h3 class="section-title">Equity Curve — ₹10L Compounded (Kite Data)</h3>
+  <h3 class="section-title">Equity Curve — ₹{capital_l:.0f}L Compounded (Kite Data)</h3>
   <div class="chart-wrap"><canvas id="eqChart"></canvas></div>
 </div>
 
