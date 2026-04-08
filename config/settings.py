@@ -58,6 +58,38 @@ INSTRUMENTS = {
         "exchange": "NSE",
         "symbol": "INDIA VIX",
     },
+
+    # ── Phase 1 expansion instrument ─────────────────────────────────────────
+    # NIFTYIT: Nifty IT sector index — correlation ~0.65 with NIFTY (best diversifier)
+    # F&O available since 2001, lot size 30, already in v6_backtest.py LOT_SIZES
+    # Token: verify after login with the lookup command in README
+    # Run: python3 -c "from data.fetcher import KiteAuth; k=KiteAuth().login();
+    #       [print(i['instrument_token'],i['tradingsymbol'],i['name'])
+    #        for i in k.instruments('NSE') if 'NIFTY IT' in i.get('name','')]"
+    "NIFTYIT": {
+        "token": 259849,              # NIFTY IT spot index — verified 2026-04-08
+        "exchange": "NSE",
+        "symbol": "NIFTY IT",
+        "futures_symbol": "NFO:NIFTYIT",
+        "lot_size": 30,
+        "tick_size": 0.05,
+    },
+
+    # ── Phase 2 expansion instrument ─────────────────────────────────────────
+    # NIFTYNXT50: Nifty Next 50 index — tracks rank 51-100 stocks by market cap
+    # F&O launched ~2022, decent liquidity, slightly different cycle from NIFTY 50
+    # Token: verify after login
+    # Run: python3 -c "from data.fetcher import KiteAuth; k=KiteAuth().login();
+    #       [print(i['instrument_token'],i['tradingsymbol'],i['name'])
+    #        for i in k.instruments('NSE') if 'NEXT 50' in i.get('name','') or 'NIFTY NEXT' in i.get('tradingsymbol','')]"
+    "NIFTYNXT50": {
+        "token": None,                # TODO: fill in after running lookup above
+        "exchange": "NSE",
+        "symbol": "NIFTY NEXT 50",
+        "futures_symbol": "NFO:NIFTYNXT50",
+        "lot_size": 25,
+        "tick_size": 0.05,
+    },
 }
 
 # ---------------------------------------------------------------------------

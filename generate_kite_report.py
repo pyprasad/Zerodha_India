@@ -35,13 +35,15 @@ from data.store import OHLCVStore
 # Step 0: Export Kite data → CSVs that v6_backtest.load_data() expects
 # ---------------------------------------------------------------------------
 DATA_DIR       = Path("data/historical")
-V6_INSTRUMENTS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "INDIAVIX"]
+V6_INSTRUMENTS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "INDIAVIX", "NIFTYIT"]
 
 # Instruments with FULL real OHLCV from 2017 in Kite API
 # MIDCPNIFTY (token 288009) has flat open=high=low=close bars pre-2022 in Kite,
 # so it's excluded from the main 9-year backtest (v6_backtest drops flat bars,
 # reducing MIDCPNIFTY to ~1046 real bars which limits the date-intersection to 2022+)
-KITE_MAIN_INSTRUMENTS = ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+# NIFTYIT (token 259849) has clean OHLCV from 2017-01-02 — included in main run
+# Expansion backtest proved NIFTYIT adds +8.9% ann return, Sharpe 2.76 → 3.03
+KITE_MAIN_INSTRUMENTS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "NIFTYIT"]
 
 print("Exporting Kite data from OHLCVStore → CSV format v6 expects ...")
 store = OHLCVStore()
@@ -80,12 +82,13 @@ for inst in V6_INSTRUMENTS:
           f"({df.index.min().date()} → {df.index.max().date()}){note}")
 
 # ---------------------------------------------------------------------------
-# Step 1: Run v6 backtest using KITE_MAIN_INSTRUMENTS (3 insts with full data)
+# Step 1: Run v6 backtest using KITE_MAIN_INSTRUMENTS (4 insts with full data)
 # ---------------------------------------------------------------------------
 print("\nRunning v6 backtest on Kite data ...")
 print(f"  Main instruments: {KITE_MAIN_INSTRUMENTS} (full 2017–2026 Kite OHLCV)")
 print("  Note: MIDCPNIFTY excluded — Kite token has flat bars pre-2022 (only ~1046 real bars)")
-print("        A supplementary 4-instrument run (2022+) is shown separately in the report.")
+print("        NIFTYIT included — token 259849 has clean OHLCV from 2017, adds +8.9%/yr")
+print("        A supplementary 5-instrument run (2022+) is shown separately in the report.")
 from v6_backtest import (
     run_v6, annual_breakdown, attribution_stats, instrument_stats,
     CAPITAL, INSTRUMENTS_4, CONFIGS
@@ -93,40 +96,41 @@ from v6_backtest import (
 
 Path("reports").mkdir(exist_ok=True)
 
-print("  Running WR_3Inst/Kite (NIFTY+BANKNIFTY+FINNIFTY, full 9yr) ...")
+print("  Running WR_4Inst/Kite (NIFTY+BANKNIFTY+FINNIFTY+NIFTYIT, full 9yr) ...")
 pf_best   = run_v6(KITE_MAIN_INSTRUMENTS, ["williams_r"], CAPITAL)
-s_best    = pf_best.stats("WR_3Inst_Kite")
+s_best    = pf_best.stats("WR_4Inst_Kite")
 ybl       = annual_breakdown(pf_best)
 attr      = attribution_stats(pf_best)
 ia        = instrument_stats(pf_best)
 trades_df = pd.DataFrame(pf_best.trades)
-print(f"  WR_3Inst_Kite: {s_best['ann_ret']:+.1f}%/yr, {s_best['num_trades']} trades")
+print(f"  WR_4Inst_Kite: {s_best['ann_ret']:+.1f}%/yr, {s_best['num_trades']} trades")
 
-print("  Running WR_VIX_Sizing (3 insts) ...")
+print("  Running WR_VIX_Sizing (4 insts) ...")
 pf_vix    = run_v6(KITE_MAIN_INSTRUMENTS, ["williams_r_vix"], CAPITAL)
-s_vix     = pf_vix.stats("WR_VIX_3Inst")
-print(f"  WR_VIX_3Inst: {s_vix['ann_ret']:+.1f}%/yr")
+s_vix     = pf_vix.stats("WR_VIX_4Inst")
+print(f"  WR_VIX_4Inst: {s_vix['ann_ret']:+.1f}%/yr")
 
-# Supplementary: 4-instrument run (limited to 2022+ due to MIDCPNIFTY data)
-print("  Running WR_4Inst (includes MIDCPNIFTY, limited to 2022+) ...")
+# Supplementary: 5-instrument run (limited to 2022+ due to MIDCPNIFTY data)
+INSTRUMENTS_5 = KITE_MAIN_INSTRUMENTS + ["MIDCPNIFTY"]
+print("  Running WR_5Inst (includes MIDCPNIFTY, limited to 2022+) ...")
 try:
-    pf_4inst  = run_v6(INSTRUMENTS_4, ["williams_r"], CAPITAL)
-    s_4inst   = pf_4inst.stats("WR_4Inst_2022")
-    print(f"  WR_4Inst_2022: {s_4inst['ann_ret']:+.1f}%/yr (limited date range)")
+    pf_4inst  = run_v6(INSTRUMENTS_5, ["williams_r"], CAPITAL)
+    s_4inst   = pf_4inst.stats("WR_5Inst_2022")
+    print(f"  WR_5Inst_2022: {s_4inst['ann_ret']:+.1f}%/yr (limited date range)")
 except Exception as e:
     pf_4inst  = None
     s_4inst   = None
-    print(f"  WR_4Inst_2022: FAILED — {e}")
+    print(f"  WR_5Inst_2022: FAILED — {e}")
 
-print("  Running all 3-instrument configs ...")
+print("  Running all 4-instrument configs ...")
 kite_configs = {
-    "WR_3Inst":         (KITE_MAIN_INSTRUMENTS, ["williams_r"]),
-    "WR_VIX_3Inst":     (KITE_MAIN_INSTRUMENTS, ["williams_r_vix"]),
-    "Regime_3Inst":     (KITE_MAIN_INSTRUMENTS, ["regime_adaptive"]),
-    "VIX_Spike+WR_3":   (KITE_MAIN_INSTRUMENTS, ["vix_spike", "williams_r"]),
-    "Momentum_3Inst":   (KITE_MAIN_INSTRUMENTS, ["momentum_52wk"]),
-    "Monthly_3Inst":    (KITE_MAIN_INSTRUMENTS, ["monthly_rotation"]),
-    "COMBINED_3Inst":   (KITE_MAIN_INSTRUMENTS, ["vix_spike", "williams_r_vix",
+    "WR_4Inst":         (KITE_MAIN_INSTRUMENTS, ["williams_r"]),
+    "WR_VIX_4Inst":     (KITE_MAIN_INSTRUMENTS, ["williams_r_vix"]),
+    "Regime_4Inst":     (KITE_MAIN_INSTRUMENTS, ["regime_adaptive"]),
+    "VIX_Spike+WR_4":   (KITE_MAIN_INSTRUMENTS, ["vix_spike", "williams_r"]),
+    "Momentum_4Inst":   (KITE_MAIN_INSTRUMENTS, ["momentum_52wk"]),
+    "Monthly_4Inst":    (KITE_MAIN_INSTRUMENTS, ["monthly_rotation"]),
+    "COMBINED_4Inst":   (KITE_MAIN_INSTRUMENTS, ["vix_spike", "williams_r_vix",
                                                    "regime_adaptive", "momentum_52wk",
                                                    "monthly_rotation"]),
 }

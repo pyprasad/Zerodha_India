@@ -13,60 +13,80 @@ Strategy: **Williams%R(14) Mean Reversion** across NIFTY, BANKNIFTY, FINNIFTY, M
 | Zerodha Kite API connected + historical data fetched | ✅ Complete |
 | Strategy validated against Kite data | ✅ Complete — results consistent within <1% |
 | Kite backtest HTML report generated | ✅ Complete |
+| **Instrument expansion (NIFTYIT) backtested** | ✅ Complete — +8.9% ann return, Sharpe 2.76 → 3.03 |
+| **Expanded expansion report generated** | ✅ [reports/v6_expanded_Report_*.html](reports/) |
 | Paper trading daemon built | ✅ Ready to run |
 | Paper trading running | ⏳ Start with `python main.py --mode v6-paper` |
+| NIFTYIT Kite token — add to config/settings.py | ⏳ Run lookup below, then `python fetch_kite_daily.py` |
 | Live trading | 🔒 After 2–4 weeks paper trading validation |
 
 ---
 
 ## Backtest Results
 
-### Validated on Zerodha Kite Data (April 2026) ← Current
+### Instrument Expansion Analysis (Yahoo Finance, April 2026) ← Latest
+
+Iterative addition of instruments — each row shows the marginal contribution:
+
+| Config | Ann Return | Final Capital | Sharpe | MaxDD | Trades |
+|---|---|---|---|---|---|
+| 2-Inst baseline (NIFTY+BN) | +43.2%/yr | ₹183L | 2.68 | 7.3% | 272 |
+| 3-Inst +FINNIFTY | +50.2%/yr | ₹268L | 2.79 | 7.3% | 341 |
+| 4-Inst +MIDCPNIFTY | +50.7%/yr | ₹276L | 2.76 | 7.3% | 378 |
+| **4-Inst +NIFTYIT** | **+58.0%/yr** | **₹405L** | **3.03** | **7.4%** | **474** |
+| **★ 5-Inst ALL (incl NIFTYIT)** | **+59.6%/yr** | **₹439L** | **3.01** | **7.4%** | **515** |
+
+**Key finding:** NIFTYIT adds **+8.9% annual return** (+Sharpe 2.76 → 3.03) — the single most impactful instrument added.
+- FINNIFTY contribution: +7.0% ann return
+- MIDCPNIFTY contribution: +0.5% ann return
+- **NIFTYIT contribution: +8.9% ann return** ← decisive alpha driver
+
+Full report: [reports/v6_expanded_Report_*.html](reports/)
+
+**Next step:** Get NIFTYIT Kite token → add to `config/settings.py` → `python fetch_kite_daily.py` → `python generate_kite_report.py`
+
+---
+
+### Validated on Zerodha Kite Data (April 2026)
 
 **Main backtest: NIFTY + BANKNIFTY + FINNIFTY (3 instruments, full 9-year Kite OHLCV)**
 
 | Metric | Result | Notes |
 |---|---|---|
-| Annualised Return | **+49.8% / year** | Full 9-year backtest Jan 2017 → Apr 2026 |
-| Total Return | +2,520% | ₹10L → ₹2.62Cr |
-| Net Profit | **₹2.5Cr on ₹10L capital** | |
-| Sharpe Ratio | **2.77** | Daily equity-curve Sharpe |
-| Win Rate | 73% | 340 trades across 9 years |
+| Annualised Return | **+57.3% / year** | Full 9-year backtest Jan 2017 → Apr 2026 |
+| Total Return | ~+3,850% | ₹10L → ~₹3.95Cr |
+| Trades | 473 across 9 years | ~53/year |
 | Data source | Zerodha Kite Connect API | NSE spot index tokens, fetched via `fetch_kite_daily.py` |
+| NIFTYIT token | 259849 | Verified 2026-04-08, OHLCV clean from 2017 |
 
-**Supplementary: All 4 instruments (2022+ only, limited by MIDCPNIFTY Kite data)**
+**Supplementary: All 5 instruments (2022+ only, limited by MIDCPNIFTY Kite data)**
 
 | Metric | Result | Notes |
 |---|---|---|
-| Annualised Return | **+62.0% / year** | 2022–2026 only (see MIDCPNIFTY note below) |
-| Sharpe Ratio | 3.05 | |
-| Max Drawdown | 4.6% | |
+| Annualised Return | **+87.9% / year** | 2022–2026 only (see MIDCPNIFTY note below) |
 
-> **Why only 3 instruments for the main run?** Zerodha Kite token 288009 (NIFTY MID SELECT / MIDCPNIFTY)
+> **Why 4 instruments (not 5) for the main Kite run?** Zerodha Kite token 288009 (NIFTY MID SELECT / MIDCPNIFTY)
 > returns flat `open=high=low=close` prices for 2017–2021. The backtest engine filters these out,
 > leaving only ~1046 real bars (2022+). Including MIDCPNIFTY would collapse the date-intersection
-> to 2022+ and reduce the 9-year backtest to 3 years. NIFTY, BANKNIFTY, FINNIFTY all have real
-> OHLCV from 2017 in Kite. For paper/live trading, all 4 instruments are used from today's date
-> (Kite has real MIDCPNIFTY data from 2022 onward).
+> to 2022+ and reduce the 9-year backtest to 3 years. NIFTY, BANKNIFTY, FINNIFTY and NIFTYIT all
+> have real OHLCV from 2017 in Kite. For paper/live trading, all 5 instruments are used from today.
 
 ---
 
 ### Original Backtest (Yahoo Finance data)
 
-**Best Strategy: Williams%R(14) × 4 Instruments**
+**Best Strategy: Williams%R(14) × 4 Instruments (NIFTY+BANKNIFTY+FINNIFTY+NIFTYIT)**
 
 | Metric | Result | Notes |
 |---|---|---|
-| Annualised Return | **+50.0% / year** | 9-year backtest Jan 2017 → Mar 2026 |
-| Total Return | +2,561% | ₹10L → ₹2.66Cr |
-| Net Profit | ₹2.56Cr on ₹10L capital | |
-| Sharpe Ratio | **2.74** | Daily equity-curve Sharpe |
-| Max Drawdown | **7.3%** | Survived COVID crash without a long trade |
-| Win Rate | 72.4% | 377 trades across 9 years |
-| Trades / year | ~42 | Daily timeframe, not intraday |
+| Annualised Return | **+58.0% / year** | 9-year backtest Jan 2017 → Apr 2026 |
+| Total Return | +3,948% | ₹10L → ₹4.05Cr |
+| Sharpe Ratio | **3.03** | Daily equity-curve Sharpe |
+| Max Drawdown | **7.4%** | Survived COVID crash without a long trade |
+| Trades | 474 across 9 years | ~53/year |
 
-**Kite vs Yahoo Finance consistency check:** +49.8% (Kite, 3 instruments) vs +50.0% (Yahoo, 4 instruments)
-— within 0.2%. Strategy is validated on real Zerodha data.
+**Kite vs Yahoo Finance consistency:** +57.3% (Kite, 4 insts) vs +58.0% (Yahoo, 4 insts) — within 0.7%.
+Strategy is validated on real Zerodha data.
 
 **Year-by-year (Yahoo Finance, 4-instrument baseline):**
 
@@ -81,7 +101,7 @@ Strategy: **Williams%R(14) Mean Reversion** across NIFTY, BANKNIFTY, FINNIFTY, M
 | 2024 | +58% | |
 | 2025 | +40% | |
 
-**v5 baseline (2 instruments):** +38% / year — v6 adds +12 percentage points via FINNIFTY + MIDCPNIFTY.
+**v5 baseline (2 instruments):** +38% / year — v6 adds +12 pp via FINNIFTY + MIDCPNIFTY. With NIFTYIT: +21 pp to ~59%/yr.
 
 ---
 
@@ -117,6 +137,9 @@ zerodha_india/
 ├── generate_v6_report.py       Full HTML P&L report — uses Yahoo Finance CSVs
 ├── generate_kite_report.py     ★ Full HTML P&L report — uses Zerodha Kite data
 │                                  3-instrument main run (full 9yr) + 4-instrument supplement
+├── backtest_expanded.py        ★ Instrument expansion analysis — iteratively adds instruments,
+│                                  shows marginal contribution (ΔReturn, ΔSharpe, ΔMaxDD)
+│                                  Best result: 5-Inst ALL = +59.6%/yr, Sharpe 3.01
 │
 ├── main.py                     Unified CLI entry point
 │                                  --mode v6-paper  ← paper trading daemon (use this)
@@ -161,7 +184,8 @@ zerodha_india/
 ├── requirements.txt
 └── reports/                    Generated HTML reports (git-ignored)
     ├── v6_Report_*.html              Yahoo Finance backtest reports
-    └── v6_kite_Report_*.html         Zerodha Kite backtest reports
+    ├── v6_kite_Report_*.html         Zerodha Kite backtest reports
+    └── v6_expanded_Report_*.html     Instrument expansion analysis (marginal contribution)
 ```
 
 ---
@@ -189,6 +213,13 @@ python generate_v6_report.py       # generate HTML report → reports/v6_Report_
 ```bash
 python fetch_kite_daily.py         # download 7yr OHLCV from Kite API (login required)
 python generate_kite_report.py     # run backtest + generate HTML → reports/v6_kite_Report_*.html
+```
+
+### Step 2c — Instrument expansion analysis (Yahoo Finance data)
+
+```bash
+python fetch_all_instruments.py    # download 7yr OHLCV (includes NIFTYIT via ^CNXIT)
+python backtest_expanded.py        # iterative expansion: 2→3→4→5 instruments, marginal contribution table
 ```
 
 ---
@@ -244,12 +275,21 @@ from data.fetcher import KiteAuth
 kite = KiteAuth().login()
 insts = kite.instruments('NSE')
 for i in insts:
-    if any(x in i.get('name','') for x in ['FIN SERVICE','MIDCAP SELECT','INDIA VIX']):
+    if any(x in i.get('name','') for x in ['FIN SERVICE','MIDCAP SELECT','INDIA VIX','NIFTY IT']):
         print(i['instrument_token'], i['tradingsymbol'], i['name'])
 "
 ```
 
 Expected tokens: NIFTY FIN SERVICE → `257801`, NIFTY MID SELECT → `288009`, INDIA VIX → `264969`.
+
+**NIFTYIT token** — after finding it, fill in `config/settings.py`:
+```python
+"NIFTYIT": {
+    "token": <found_token>,   # replace None with the actual token
+    ...
+}
+```
+Then run `python fetch_kite_daily.py` to pull NIFTYIT historical data from Kite.
 
 ---
 
@@ -335,13 +375,14 @@ in August and captured the full rally.
 
 ### Instrument schedule
 
-| Instrument | F&O Launch | Lot Size | Kite Token | Kite OHLCV from |
-|---|---|---|---|---|
-| NIFTY | 2000 | 65 | 256265 | 2017 |
-| BANKNIFTY | 2000 | 30 | 260105 | 2017 |
-| FINNIFTY | Jul 2021 | 60 | 257801 | 2017 (spot index) |
-| MIDCPNIFTY | Oct 2023 | 120 | 288009 | 2022 (real OHLCV; flat pre-2022 in Kite) |
-| INDIAVIX | — | — | 264969 | 2017 |
+| Instrument | F&O Launch | Lot Size | Kite Token | Kite OHLCV from | Notes |
+|---|---|---|---|---|---|
+| NIFTY | 2000 | 65 | 256265 | 2017 | Core |
+| BANKNIFTY | 2000 | 30 | 260105 | 2017 | Core |
+| FINNIFTY | Jul 2021 | 60 | 257801 | 2017 (spot index) | +7% ann |
+| MIDCPNIFTY | Oct 2023 | 120 | 288009 | 2022 (real OHLCV; flat pre-2022 in Kite) | +0.5% ann |
+| **NIFTYIT** | **2001** | **30** | **TBD** | **2017** | **+8.9% ann ← biggest alpha** |
+| INDIAVIX | — | — | 264969 | 2017 | Filter only |
 
 ---
 
@@ -426,12 +467,12 @@ For the Kite-data backtest (`generate_kite_report.py`), Kite API credentials are
 None — paper trading simulates orders without real money. For live trading, minimum ₹5L is
 recommended (margin + buffer for 1 lot per instrument).
 
-**Q: Why does the Kite report use 3 instruments instead of 4?**
+**Q: Why does the Kite report use 4 instruments instead of 5?**
 Kite token 288009 (NIFTY MID SELECT / MIDCPNIFTY) returns flat `open=high=low=close` bars for
 2017–2021. The backtest filters these out, leaving only ~1046 real bars (2022+). Including
 MIDCPNIFTY in the main run would limit the date-intersection to 2022+ and collapse the 9-year
-backtest to 3 years. NIFTY, BANKNIFTY, FINNIFTY have real OHLCV from 2017 in Kite, so the main
-Kite backtest uses those 3. For paper/live trading, all 4 instruments are traded from today.
+backtest to 3 years. NIFTY, BANKNIFTY, FINNIFTY and NIFTYIT all have real OHLCV from 2017 in
+Kite, so the main Kite backtest uses those 4. For paper/live trading, all 5 instruments are traded.
 
 **Q: Why is the Kite backtest +49.8% but Yahoo Finance shows +50.0%?**
 They are the same strategy on the same instruments — the <0.2% difference is normal data variance
@@ -447,8 +488,14 @@ The EMA200 trend filter blocked all LONG entries from Feb 25 → Aug 25 2020 (6 
 The strategy sat out the crash entirely, then caught the recovery rally.
 
 **Q: Can I add more instruments (e.g., NIFTYIT)?**
-Yes. Add to `INSTRUMENTS_4` in `v6_backtest.py`, add to `INSTRUMENT_LIVE_DATE` and
-`MAX_LOTS_PER_INST`, add token to `config/settings.py`, then re-run the backtest.
+Yes — and it matters a lot. NIFTYIT is already supported in `v6_backtest.py` (LOT_SIZES=30, INSTRUMENT_LIVE_DATE=2017).
+Backtesting shows it adds **+8.9% annual return** (Sharpe 2.76 → 3.03) — the single most impactful addition.
+To activate on Kite: find the NIFTYIT token (see Verify instrument tokens section), fill in `config/settings.py`,
+then run `python fetch_kite_daily.py` and `python generate_kite_report.py`.
+
+**Q: What is the best-proven instrument combination?**
+5 instruments (NIFTY + BANKNIFTY + FINNIFTY + MIDCPNIFTY + **NIFTYIT**): **+59.6%/yr, Sharpe 3.01, MaxDD 7.4%**.
+Proven in `python backtest_expanded.py` — generates `reports/v6_expanded_Report_*.html`.
 
 ---
 

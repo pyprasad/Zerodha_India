@@ -65,7 +65,10 @@ END_DATE    = datetime.now()
 INTERVAL    = "day"
 
 # Instruments to fetch — keys must match config/settings.py INSTRUMENTS dict
-INSTRUMENTS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "INDIAVIX"]
+# NIFTYIT: add token in config/settings.py first, then it will be fetched automatically
+# NIFTYNXT50: Phase 2 — uncomment after adding token in config/settings.py
+INSTRUMENTS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "INDIAVIX", "NIFTYIT"]
+# INSTRUMENTS += ["NIFTYNXT50"]  # Phase 2 — uncomment when token is ready
 
 
 def main():
