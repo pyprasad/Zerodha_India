@@ -295,10 +295,22 @@ class V6PaperRunner:
             else:
                 stop_price = entry_price + stop_distance
 
-            # Compute position size (lot-aligned, risk-based)
+            # Compute position size (lot-aligned, risk-based, margin-aware)
             qty = self._compute_quantity(inst, entry_price, stop_price, positions)
             if qty == 0:
-                console.print(f"[yellow][v6-paper] Insufficient risk budget for {inst} — skipping[/yellow]")
+                console.print(f"[yellow][v6-paper] Insufficient risk budget or margin for {inst} — skipping[/yellow]")
+                continue
+
+            # Margin check: verify SPAN margin is available before entering
+            span_needed = qty * entry_price * 0.10          # 10% of notional
+            equity      = self._get_current_equity()
+            locked      = sum(p.get("span_margin", 0) for p in positions.values())
+            avail_cash  = equity - locked
+            if avail_cash < span_needed:
+                console.print(
+                    f"[red][v6-paper] Margin check FAILED for {inst}: "
+                    f"need ₹{span_needed:,.0f} SPAN, only ₹{avail_cash:,.0f} available — skipping[/red]"
+                )
                 continue
 
             # Place paper order (simulation only)
@@ -321,7 +333,7 @@ class V6PaperRunner:
                 order_id=result.order_id,
             )
 
-            # Persist position
+            # Persist position — include span_margin so future entries account for it
             positions[inst] = {
                 "direction":   direction,
                 "entry_price": entry_price,
@@ -330,6 +342,7 @@ class V6PaperRunner:
                 "tag":         sig["tag"],
                 "entry_date":  datetime.now().strftime("%Y-%m-%d"),
                 "order_id":    result.order_id,
+                "span_margin": span_needed,              # locked margin for this position
             }
             console.print(
                 f"[green][v6-paper] ENTERED {inst} {'LONG' if direction == 'L' else 'SHORT'} "
@@ -463,11 +476,14 @@ class V6PaperRunner:
         """
         from v6_backtest import MAX_LOTS_PER_INST, MAX_TOTAL_RISK
 
-        # Estimate current capital (V6_CAPITAL is the baseline)
-        # In paper trading, we track notional capital via equity log
+        # Estimate current capital from equity log
         equity = self._get_current_equity()
         if equity <= 0:
             equity = V6_CAPITAL
+
+        # Available cash = equity minus all locked SPAN margins
+        locked_margin = sum(p.get("span_margin", 0) for p in open_positions.values())
+        avail_cash    = equity - locked_margin
 
         # Compute available risk budget
         current_risk = sum(
@@ -481,7 +497,7 @@ class V6PaperRunner:
         lot        = LOT_SIZES.get(instrument, 65)
         min_stop   = entry * 0.004    # 0.4% minimum stop distance
         risk_unit  = max(abs(entry - stop), min_stop)
-        risk_amt   = equity * avail_risk
+        risk_amt   = avail_cash * avail_risk   # use available cash, not total equity
         lots       = int(risk_amt / (risk_unit * lot))
 
         if lots <= 0:

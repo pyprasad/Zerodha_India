@@ -94,6 +94,12 @@ MAX_CONCURRENT = 4          # Max 4 open positions (one per instrument)
 MAX_TOTAL_RISK = 0.08       # Total portfolio risk cap: 8%
 WARMUP         = 260        # Bars to skip for indicator warm-up (252 + buffer)
 
+# MARGIN MODEL — FIX 10: realistic SPAN margin reservation + daily MTM settlement
+# NSE index futures: SPAN ≈ 10% of notional. Maintenance margin = 75% of SPAN.
+# When daily MTM causes capital to drop below maintenance, broker force-closes.
+SPAN_MARGIN_PCT    = 0.10   # 10% of notional locked as initial margin per position
+MAINT_MARGIN_RATIO = 0.75   # maintenance margin = 75% of SPAN (standard NSE rule)
+
 INSTRUMENTS_4 = ["NIFTY", "BANKNIFTY", "MIDCPNIFTY", "FINNIFTY"]
 
 
@@ -289,9 +295,11 @@ class Portfolio:
     def __init__(self, capital=CAPITAL):
         self.C0 = float(capital)
         self.C  = float(capital)
-        self.positions    = {}
-        self.trades       = []
-        self.daily_equity = []
+        self.positions       = {}
+        self.trades          = []
+        self.daily_equity    = []
+        self.margin_reserved = {}   # {instrument: span_amount_locked}
+        self.margin_calls    = 0    # count of margin-call force-closes
 
     def _comm(self, qty, entry_price, exit_price, direction):
         """
@@ -312,10 +320,12 @@ class Portfolio:
     def _qty(self, instrument, entry, stop, risk_pct=RISK_PER_TRADE):
         """
         Compute lot-aligned quantity respecting:
-          - Portfolio risk budget (avail_risk)
+          - Portfolio risk budget (avail_risk) — uses available cash, not total C
           - Max lots cap per instrument (FIX 2)
           - FIX 3: no min-1-lot override — returns 0 if budget insufficient
+          - FIX 10: risk_amt based on available cash (C minus locked SPAN margins)
         """
+        avail_cash   = self.C - sum(self.margin_reserved.values())
         current_risk = sum(
             abs(p["entry"] - p["stop"]) * p["qty"] / self.C
             for p in self.positions.values()
@@ -324,10 +334,10 @@ class Portfolio:
         if avail_risk <= 0:
             return 0
 
-        risk_amt  = self.C * avail_risk
+        risk_amt  = avail_cash * avail_risk           # FIX 10: use available cash
         lot       = LOT_SIZES.get(instrument, 65)
         risk_unit = max(abs(entry - stop), entry * MIN_STOP_PCT)
-        lots      = int(risk_amt / (risk_unit * lot))   # FIX 3: no max(1,...) override
+        lots      = int(risk_amt / (risk_unit * lot)) # FIX 3: no max(1,...) override
 
         if lots <= 0:
             return 0
@@ -342,17 +352,25 @@ class Portfolio:
         if len(self.positions) >= MAX_CONCURRENT:   return False
         qty = self._qty(instrument, entry, stop, risk_pct)
         if qty == 0:                                 return False
+
+        # FIX 10: check SPAN margin availability before entering
+        span_margin = qty * entry * SPAN_MARGIN_PCT
+        avail_cash  = self.C - sum(self.margin_reserved.values())
+        if avail_cash < span_margin:
+            return False   # insufficient margin — skip trade
+
         tgt = entry + direction * abs(entry - stop) * 2.0
-        # Deduct entry-side costs only (brokerage + exchange + slippage for entry leg;
-        # exit-side costs deducted at close). Use placeholder exit=entry for entry cost.
         entry_cost = BROKERAGE + qty * entry * (EXCHANGE_FEE + SLIPPAGE)
-        # STT for shorts is on the sell (entry) leg
         if direction == -1:
             entry_cost += qty * entry * STT_RATE
         self.C -= entry_cost
+        self.C -= span_margin                        # FIX 10: lock SPAN margin
+        self.margin_reserved[instrument] = span_margin
+
         self.positions[instrument] = dict(
             strategy=strategy, d=direction, entry=entry, stop=stop,
-            target=tgt, qty=qty, date=date, tag=tag
+            target=tgt, qty=qty, date=date, tag=tag,
+            last_mtm_price=entry   # FIX 10: track last settled price for daily MTM
         )
         return True
 
@@ -383,13 +401,27 @@ class Portfolio:
     def _close(self, instrument, date, exit_price, reason):
         pos  = self.positions.pop(instrument)
         d, entry, qty = pos["d"], pos["entry"], pos["qty"]
-        # Exit-side costs: brokerage + exchange + slippage for exit leg
+
+        # FIX 10: settle final MTM (from last daily settlement price to exit price)
+        last_price = pos.get("last_mtm_price", entry)
+        final_mtm  = d * (exit_price - last_price) * qty
+        self.C += final_mtm
+
+        # FIX 10: return locked SPAN margin
+        self.C += self.margin_reserved.pop(instrument, 0)
+
+        # Deduct exit-side costs only (entry costs already deducted at enter())
         exit_cost = BROKERAGE + qty * exit_price * (EXCHANGE_FEE + SLIPPAGE)
-        # STT for longs is on the sell (exit) leg
         if d == 1:
             exit_cost += qty * exit_price * STT_RATE
-        pnl  = d * (exit_price - entry) * qty - exit_cost
-        self.C += pnl
+        self.C -= exit_cost
+
+        # Reconstruct full P&L for trade log (gross P&L minus both legs of costs)
+        entry_cost = BROKERAGE + qty * entry * (EXCHANGE_FEE + SLIPPAGE)
+        if d == -1:
+            entry_cost += qty * entry * STT_RATE
+        pnl = d * (exit_price - entry) * qty - entry_cost - exit_cost
+
         self.trades.append(dict(
             instrument=instrument, strategy=pos["strategy"],
             entry_date=pos["date"], exit_date=date,
@@ -438,7 +470,8 @@ class Portfolio:
                     sharpe=round(shr, 3), max_dd=round(dd, 2), win_rate=round(wr, 1),
                     num_trades=len(T), net_pnl=round(self.C - self.C0),
                     capital=round(self.C), avg_win=round(aw), avg_loss=round(al),
-                    trades_per_yr=round(len(T) / yrs, 1))
+                    trades_per_yr=round(len(T) / yrs, 1),
+                    margin_calls=self.margin_calls)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -684,6 +717,31 @@ def run_v6(instruments, strategy_names, capital=CAPITAL):
                     if np.isnan(e200_) or p_ < e200_: continue
                     atr_ = ind["atr"].iloc[ii]
                     pending_entries[inst] = ("MONTHLY_ROT", 1, atr_ * 1.5, "MONTHLY_ROT", RISK_PER_TRADE)
+
+        # ── FIX 10: DAILY MTM SETTLEMENT ─────────────────────────────────
+        # Exchange settles all futures at EOD close price daily.
+        # Credits/debits are applied to self.C immediately, so available
+        # cash fluctuates intraday before the margin call check.
+        for inst, pos in list(pf.positions.items()):
+            if inst not in data or date not in data[inst].index: continue
+            ii          = data[inst].index.get_loc(date)
+            today_close = float(inds[inst]["close"].iloc[ii])
+            last_price  = pos.get("last_mtm_price", pos["entry"])
+            pf.C       += pos["d"] * (today_close - last_price) * pos["qty"]
+            pos["last_mtm_price"] = today_close
+
+        # ── FIX 10: MARGIN CALL CHECK ─────────────────────────────────────
+        # If capital drops below maintenance margin threshold, broker
+        # force-closes ALL positions to protect their collateral.
+        if pf.margin_reserved:
+            total_maint = sum(pf.margin_reserved.values()) * MAINT_MARGIN_RATIO
+            if pf.C < total_maint:
+                pf.margin_calls += 1
+                for inst in list(pf.positions.keys()):
+                    if inst in data and date in data[inst].index:
+                        ii = data[inst].index.get_loc(date)
+                        cp = float(inds[inst]["close"].iloc[ii])
+                        pf.force_close(inst, date, cp, "margin_call")
 
         # ── ENTRIES: signal → pending (FIX 4: no same-bar execution) ──────
         for inst in instruments:
