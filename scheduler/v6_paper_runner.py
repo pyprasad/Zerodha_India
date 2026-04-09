@@ -56,6 +56,54 @@ EQUITY_FILE    = LOGS_DIR / "v6_paper_equity.csv"
 # Days of daily history to load when computing signals (enough for EMA200 warm-up)
 HISTORY_DAYS = 400
 
+# ---------------------------------------------------------------------------
+# NSE trading day check
+# ---------------------------------------------------------------------------
+_nse_holidays_cache: set = set()   # dates (date objects) fetched from Kite
+_holidays_fetched_on: object = None  # date the cache was last populated
+
+
+def _load_nse_holidays(kite) -> None:
+    """Populate _nse_holidays_cache from Kite API (once per calendar day)."""
+    global _nse_holidays_cache, _holidays_fetched_on
+    today = datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata")).date()
+    if _holidays_fetched_on == today:
+        return
+    try:
+        holiday_list = kite.holidays("NSE")          # returns list of {date, description}
+        _nse_holidays_cache = {
+            datetime.strptime(h["date"], "%Y-%m-%d").date()
+            for h in holiday_list
+        }
+        _holidays_fetched_on = today
+        logger.info(f"[v6-paper] Loaded {len(_nse_holidays_cache)} NSE holidays from Kite")
+    except Exception as e:
+        logger.warning(f"[v6-paper] Could not fetch NSE holidays from Kite: {e} — weekend-only check active")
+
+
+def is_trading_day(kite=None) -> bool:
+    """
+    Returns True if today is an NSE trading day.
+    - Skips Saturday and Sunday always.
+    - Skips NSE public holidays (fetched from Kite API, cached daily).
+    """
+    ist_today = datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata")).date()
+
+    # Weekend check
+    if ist_today.weekday() >= 5:   # 5=Saturday, 6=Sunday
+        logger.info(f"[v6-paper] {ist_today} is a weekend — skipping")
+        return False
+
+    # Holiday check (only if we have a logged-in kite instance)
+    if kite is not None:
+        _load_nse_holidays(kite)
+
+    if ist_today in _nse_holidays_cache:
+        logger.info(f"[v6-paper] {ist_today} is an NSE holiday — skipping")
+        return False
+
+    return True
+
 
 class V6PaperRunner:
     """
@@ -80,11 +128,15 @@ class V6PaperRunner:
     # ──────────────────────────────────────────────────────────────────────
     def login(self):
         """Login to Zerodha and refresh access token. Called at 08:55 IST."""
+        if not is_trading_day():          # weekend-only check before login
+            console.print("[dim][v6-paper] Non-trading day — skipping login[/dim]")
+            return
         logger.info("[v6-paper] Logging in to Zerodha...")
         try:
             self.kite     = self.kite_auth.login()
             self.fetcher  = KiteDataFetcher(self.kite)
             self._logged_in = True
+            _load_nse_holidays(self.kite)   # cache NSE holidays now that we're logged in
             console.print("[bold green][v6-paper] Zerodha login successful[/bold green]")
         except Exception as e:
             logger.error(f"[v6-paper] Login failed: {e}")
@@ -140,6 +192,8 @@ class V6PaperRunner:
         Signals are queued in logs/v6_paper_pending.json for tomorrow's entry.
         Called at 15:25 IST (after market close, before 15:30 cleanup).
         """
+        if not is_trading_day(self.kite):
+            return
         console.print("\n[bold cyan][v6-paper] 15:25 IST — End-of-day signal check[/bold cyan]")
 
         data_dict = self._fetch_latest_daily()
@@ -190,6 +244,8 @@ class V6PaperRunner:
         Uses live LTP at 09:16 as the entry price (open price proxy).
         Called at 09:16 IST — 1 minute after market open.
         """
+        if not is_trading_day(self.kite):
+            return
         console.print("\n[bold cyan][v6-paper] 09:16 IST — Morning entry execution[/bold cyan]")
 
         if not PENDING_FILE.exists():
@@ -292,6 +348,8 @@ class V6PaperRunner:
         Check stop-loss hits and WR mid-exit signals for all open positions.
         Called multiple times during the day (12:00, 14:00, 15:25).
         """
+        if not is_trading_day(self.kite):
+            return
         positions = self._load_positions()
         if not positions:
             return
@@ -352,6 +410,8 @@ class V6PaperRunner:
         Print daily P&L summary and append to equity log.
         Called at 15:30 IST.
         """
+        if not is_trading_day(self.kite):
+            return
         console.print("\n[bold cyan][v6-paper] 15:30 IST — End of day summary[/bold cyan]")
         self.tracker.print_summary()
 
