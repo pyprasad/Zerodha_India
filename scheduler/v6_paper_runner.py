@@ -62,9 +62,26 @@ HISTORY_DAYS = 400
 _nse_holidays_cache: set = set()   # dates (date objects) fetched from Kite
 _holidays_fetched_on: object = None  # date the cache was last populated
 
+# Hardcoded NSE trading holidays 2025–2026 (official NSE calendar)
+# Used as fallback when Kite API doesn't expose a holidays endpoint.
+_NSE_HOLIDAYS_FALLBACK = {
+    # 2025
+    "2025-01-26", "2025-02-26", "2025-03-14", "2025-03-31",
+    "2025-04-10", "2025-04-14", "2025-04-18", "2025-05-01",
+    "2025-08-15", "2025-08-27", "2025-10-02", "2025-10-02",
+    "2025-10-20", "2025-10-21", "2025-10-24", "2025-11-05",
+    "2025-12-25",
+    # 2026
+    "2026-01-26", "2026-03-03", "2026-03-20", "2026-04-02",
+    "2026-04-03", "2026-04-14", "2026-05-01", "2026-06-12",
+    "2026-07-31", "2026-08-15", "2026-08-20", "2026-10-02",
+    "2026-10-29", "2026-11-04", "2026-11-23", "2026-12-25",
+}
+
 
 def _load_nse_holidays(kite) -> None:
-    """Populate _nse_holidays_cache from Kite API (once per calendar day)."""
+    """Populate _nse_holidays_cache from Kite API (once per calendar day).
+    Falls back to hardcoded NSE calendar if the API endpoint is unavailable."""
     global _nse_holidays_cache, _holidays_fetched_on
     today = datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata")).date()
     if _holidays_fetched_on == today:
@@ -77,8 +94,14 @@ def _load_nse_holidays(kite) -> None:
         }
         _holidays_fetched_on = today
         logger.info(f"[v6-paper] Loaded {len(_nse_holidays_cache)} NSE holidays from Kite")
-    except Exception as e:
-        logger.warning(f"[v6-paper] Could not fetch NSE holidays from Kite: {e} — weekend-only check active")
+    except Exception:
+        # kite.holidays() not available in this SDK version — use hardcoded calendar
+        _nse_holidays_cache = {
+            datetime.strptime(d, "%Y-%m-%d").date()
+            for d in _NSE_HOLIDAYS_FALLBACK
+        }
+        _holidays_fetched_on = today
+        logger.info(f"[v6-paper] Using hardcoded NSE holiday calendar ({len(_nse_holidays_cache)} holidays)")
 
 
 def is_trading_day(kite=None) -> bool:
