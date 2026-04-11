@@ -37,6 +37,7 @@ from rich import box
 from config import credentials as creds
 from config.settings import INSTRUMENTS as KITE_INSTRUMENTS
 from data.fetcher import KiteAuth, KiteDataFetcher
+from data.nse_holidays import get_holidays
 from data.store import OHLCVStore
 from execution.broker import PaperBroker
 from execution.tracker import TradeTracker
@@ -59,69 +60,26 @@ HISTORY_DAYS = 400
 # ---------------------------------------------------------------------------
 # NSE trading day check
 # ---------------------------------------------------------------------------
-_nse_holidays_cache: set = set()   # dates (date objects) fetched from Kite
-_holidays_fetched_on: object = None  # date the cache was last populated
 
-# Hardcoded NSE trading holidays 2025–2026 (official NSE calendar)
-# Used as fallback when Kite API doesn't expose a holidays endpoint.
-_NSE_HOLIDAYS_FALLBACK = {
-    # 2025
-    "2025-01-26", "2025-02-26", "2025-03-14", "2025-03-31",
-    "2025-04-10", "2025-04-14", "2025-04-18", "2025-05-01",
-    "2025-08-15", "2025-08-27", "2025-10-02", "2025-10-02",
-    "2025-10-20", "2025-10-21", "2025-10-24", "2025-11-05",
-    "2025-12-25",
-    # 2026
-    "2026-01-26", "2026-03-03", "2026-03-20", "2026-04-02",
-    "2026-04-03", "2026-04-14", "2026-05-01", "2026-06-12",
-    "2026-07-31", "2026-08-15", "2026-08-20", "2026-10-02",
-    "2026-10-29", "2026-11-04", "2026-11-23", "2026-12-25",
-}
-
-
-def _load_nse_holidays(kite) -> None:
-    """Populate _nse_holidays_cache from Kite API (once per calendar day).
-    Falls back to hardcoded NSE calendar if the API endpoint is unavailable."""
-    global _nse_holidays_cache, _holidays_fetched_on
-    today = datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata")).date()
-    if _holidays_fetched_on == today:
-        return
-    try:
-        holiday_list = kite.holidays("NSE")          # returns list of {date, description}
-        _nse_holidays_cache = {
-            datetime.strptime(h["date"], "%Y-%m-%d").date()
-            for h in holiday_list
-        }
-        _holidays_fetched_on = today
-        logger.info(f"[v6-paper] Loaded {len(_nse_holidays_cache)} NSE holidays from Kite")
-    except Exception:
-        # kite.holidays() not available in this SDK version — use hardcoded calendar
-        _nse_holidays_cache = {
-            datetime.strptime(d, "%Y-%m-%d").date()
-            for d in _NSE_HOLIDAYS_FALLBACK
-        }
-        _holidays_fetched_on = today
-        logger.info(f"[v6-paper] Using hardcoded NSE holiday calendar ({len(_nse_holidays_cache)} holidays)")
+# Load holiday calendar once at module startup (auto-refreshes in December)
+_nse_holidays: set = get_holidays()
 
 
 def is_trading_day(kite=None) -> bool:
     """
-    Returns True if today is an NSE trading day.
+    Returns True if today (IST) is an NSE trading day.
     - Skips Saturday and Sunday always.
-    - Skips NSE public holidays (fetched from Kite API, cached daily).
+    - Skips NSE public holidays from data/nse_holidays.json
+      (auto-refreshed every December via exchange_calendars library).
+    The `kite` parameter is kept for API compatibility but is no longer used.
     """
     ist_today = datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata")).date()
 
-    # Weekend check
-    if ist_today.weekday() >= 5:   # 5=Saturday, 6=Sunday
+    if ist_today.weekday() >= 5:
         logger.info(f"[v6-paper] {ist_today} is a weekend — skipping")
         return False
 
-    # Holiday check (only if we have a logged-in kite instance)
-    if kite is not None:
-        _load_nse_holidays(kite)
-
-    if ist_today in _nse_holidays_cache:
+    if ist_today in _nse_holidays:
         logger.info(f"[v6-paper] {ist_today} is an NSE holiday — skipping")
         return False
 
