@@ -58,7 +58,7 @@ class RiskManager:
         self.max_daily_loss_pct = max_daily_loss_pct
         self.per_trade_risk_pct = per_trade_risk_pct
 
-        self._today: Optional[date] = None
+        self._today: Optional[date] = date.today()
         self._daily_pnl: float = 0.0
         self._trading_halted: bool = False
         self._open_instruments: dict = {}   # instrument → quantity
